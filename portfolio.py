@@ -62,10 +62,14 @@ def download_prices(
         if "Close" in first_level:
             close = raw["Close"].copy()
             open_ = raw["Open"].copy()
+            high = raw["High"].copy()
+            low = raw["Low"].copy()
             volume = raw["Volume"].copy() if "Volume" in first_level else None
         else:
             close = raw.xs("Close", axis=1, level=1).copy()
             open_ = raw.xs("Open", axis=1, level=1).copy()
+            high = raw.xs("High", axis=1, level=1).copy()
+            low = raw.xs("Low", axis=1, level=1).copy()
             volume = (
                 raw.xs("Volume", axis=1, level=1).copy()
                 if "Volume" in raw.columns.get_level_values(1)
@@ -76,14 +80,20 @@ def download_prices(
             raise ValueError("Could not find a Close column in the downloaded data.")
         close = raw[["Close"]].copy()
         open_ = raw[["Open"]].copy()
+        high = raw[["High"]].copy()
+        low = raw[["Low"]].copy()
         volume = raw[["Volume"]].copy() if "Volume" in raw.columns else None
         close.columns = [tickers[0]]
         open_.columns = [tickers[0]]
+        high.columns = [tickers[0]]
+        low.columns = [tickers[0]]
         if volume is not None:
             volume.columns = [tickers[0]]
 
     close = close.reindex(columns=all_tickers)
     open_ = open_.reindex(columns=all_tickers)
+    high = high.reindex(columns=all_tickers)
+    low = low.reindex(columns=all_tickers)
     if volume is not None:
         volume = volume.reindex(columns=all_tickers)
 
@@ -94,11 +104,15 @@ def download_prices(
     calendar = calendar.tz_localize(None) if calendar.tz is not None else calendar
     close = close.reindex(calendar)
     open_ = open_.reindex(calendar)
+    high = high.reindex(calendar)
+    low = low.reindex(calendar)
     if volume is not None:
         volume = volume.reindex(calendar)
 
     return {
         "open": open_,
+        "high": high,
+        "low": low,
         "close": close,
         "volume": volume,
         "calendar": calendar,

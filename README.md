@@ -1,4 +1,4 @@
-# Quality Trend Satellite — 2270 Streamlit App
+# SPHQ Studio — 2270 Streamlit App
 
 An interactive version of the group's quality-trend strategy:
 
@@ -20,6 +20,20 @@ https://2270-quality-trend-satellite.streamlit.app
   Luís Moreira, Miguel Monteiro
 - Submission: 4 December 2026
 
+## Chart views
+
+The dark chart panel uses TradingView Lightweight Charts and has five views:
+
+- **Growth** — quality trend, SPY and the 50/50 SPY/T-bill policy mix, all starting at 1x.
+- **Price & trades** — SPHQ candlesticks, the 200-day SMA and every executed BUY/SELL
+  arrow. Hover a trade date to see its execution price.
+- **Drawdown** — peak-to-trough decline for the strategy, SPY and the policy mix.
+- **Exposure** — share of the portfolio invested in SPHQ over time.
+- **Rolling 24m** — overlapping 24-month returns, with the strategy and SPY.
+
+The date buttons switch between MAX, 5Y, 3Y and 1Y. The LOG button toggles the growth
+chart between logarithmic and linear scales.
+
 ## What you can change
 
 - Trend window: 100–300 trading days (default 200)
@@ -39,7 +53,8 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-Then open `http://localhost:8501`.
+Then open `http://localhost:8501`. The chart component is vendored in `chart_component/`,
+so it does not load Lightweight Charts from a CDN.
 
 ## Data and methodology
 

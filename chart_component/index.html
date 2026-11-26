@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SPHQ Studio chart</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <div class="brand">
+      <div class="brand-mark">Q</div>
+      <div class="brand-text">SPHQ<span>STUDIO</span></div>
+      <div class="brand-tag">QUALITY TREND</div>
+    </div>
+    <div class="strategy">
+      <span class="strategy-name">SPHQ / SPY</span>
+      <span class="strategy-sub" id="strategySub">200-day quality trend</span>
+    </div>
+    <div class="spacer"></div>
+    <div class="range-group" id="rangeGroup">
+      <button data-range="max" class="active">MAX</button>
+      <button data-range="5y">5Y</button>
+      <button data-range="3y">3Y</button>
+      <button data-range="1y">1Y</button>
+    </div>
+    <div class="data-pill"><span class="status-dot"></span><span>Yahoo Finance</span><span class="sep">·</span><span id="dataDate">—</span></div>
+    <button class="top-btn" id="logBtn" title="Toggle log scale">LOG</button>
+  </header>
+
+  <div id="viewbar">
+    <button data-view="growth" class="active">Growth</button>
+    <button data-view="signals">Price &amp; trades</button>
+    <button data-view="drawdown">Drawdown</button>
+    <button data-view="exposure">Exposure</button>
+    <button data-view="rolling">Rolling 24m</button>
+    <div class="view-spacer"></div>
+    <span class="view-note" id="viewNote">All series start at 1</span>
+  </div>
+
+  <div id="charthead">
+    <div class="chart-title" id="chartTitle">Growth of $1</div>
+    <div class="legend" id="legend">Loading…</div>
+  </div>
+
+  <div id="chart"></div>
+
+  <div id="chartfoot">
+    <div id="chartNote">Historical simulation, not investment advice.</div>
+    <div id="statsLine">—</div>
+  </div>
+</div>
+
+<script src="lightweight-charts.standalone.production.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
