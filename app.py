@@ -341,6 +341,10 @@ st.caption(
     "Chart: **Growth** for cumulative performance · **Price & trades** for SPHQ candles with "
     "every BUY/SELL arrow · **Drawdown**, **Exposure** and **Rolling 24m** for risk."
 )
+st.caption(
+    "Assumptions: open the sidebar (top-left arrow) to change the trend window, transaction "
+    "cost, execution lag, initial capital and policy-benchmark weight."
+)
 
 # --------------------------------------------------------------------------- #
 # KPI cards
