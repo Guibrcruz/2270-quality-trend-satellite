@@ -345,6 +345,7 @@ st.caption(
     "Assumptions: open the sidebar (top-left arrow) to change the trend window, transaction "
     "cost, execution lag, initial capital and policy-benchmark weight."
 )
+st.page_link("pages/1_Treasury_Yield_Trend.py", label="Open Treasury Yield Trend")
 
 # --------------------------------------------------------------------------- #
 # KPI cards

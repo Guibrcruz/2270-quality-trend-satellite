@@ -16,15 +16,31 @@ Costs:    10 bps per side on traded notional.
 from __future__ import annotations
 
 from typing import Iterable, Mapping
+from urllib.parse import urlencode
+from urllib.request import urlopen
 
 import numpy as np
 import pandas as pd
+from pandas.tseries.holiday import USFederalHolidayCalendar
 import yfinance as yf
 
 TRADING_DAYS = 252
 DEFAULT_TICKER = "SPHQ"
 DEFAULT_BENCHMARK = "SPY"
 DEFAULT_RF = "^IRX"
+YIELD_EQUITIES = ("SPY", "RSP", "SPHQ")
+YIELD_BOND = "BND"
+YIELD_RANK_WEIGHTS = (50, 25, 15)
+YIELD_START = "2016-01-01"
+YIELD_END = "2025-12-31"
+YIELD_WARMUP_START = "2014-12-01"
+YIELD_TREND_BASELINE = {
+    "equity_if_falling": 0.30,
+    "second_if_falling": "SPHQ",
+    "first_if_rising": "SPHQ",
+    "lookback_months": 1,
+    "cost_bps": 5.0,
+}
 
 
 # --------------------------------------------------------------------------- #
@@ -54,7 +70,7 @@ def download_prices(
         threads=True,
         group_by="column",
     )
-    if raw.empty:
+    if raw is None or raw.empty:
         raise ValueError("Yahoo Finance returned no data. Check the tickers and dates.")
 
     if isinstance(raw.columns, pd.MultiIndex):
@@ -119,6 +135,30 @@ def download_prices(
     }
 
 
+def download_month_end_3y_yield(start: str, end: str) -> pd.Series:
+    """Return the latest FRED 3-year yield available at each calendar month-end."""
+    query = urlencode({"id": "DGS3", "cosd": start, "coed": end})
+    url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?{query}"
+    with urlopen(url, timeout=20) as response:
+        data = pd.read_csv(response, parse_dates=["observation_date"], na_values=["."])
+    daily = data.set_index("observation_date").sort_index()["DGS3"].dropna()
+    # The H.15 release typically reports the previous Fed business day's yield.
+    publication_lag = pd.offsets.CustomBusinessDay(calendar=USFederalHolidayCalendar())
+    available = pd.Series(daily.to_numpy(), index=[date + publication_lag for date in daily.index])
+    months = pd.period_range(start, end, freq="M")
+    monthly = available.groupby(available.index.to_period("M")).last().reindex(months)
+    if monthly.isna().any():
+        raise ValueError("FRED did not return a usable 3-year Treasury yield for every month.")
+    monthly.index = months.to_timestamp(how="end").normalize()
+    return monthly.rename("DGS3")
+
+
+def download_yield_trend_inputs() -> tuple[pd.DataFrame, pd.Series]:
+    end_exclusive = (pd.Timestamp(YIELD_END) + pd.Timedelta(days=1)).date().isoformat()
+    prices = download_prices([*YIELD_EQUITIES, YIELD_BOND], start=YIELD_WARMUP_START, end=end_exclusive)
+    return prices["close"], download_month_end_3y_yield(YIELD_WARMUP_START, YIELD_END)
+
+
 # --------------------------------------------------------------------------- #
 # Signal
 # --------------------------------------------------------------------------- #
@@ -132,6 +172,38 @@ def month_end_dates(index: pd.DatetimeIndex, start: str, end: str) -> list[pd.Ti
     series = pd.Series(index=index, data=index)
     sample = series.loc[pd.Timestamp(start):pd.Timestamp(end)]
     return list(sample.groupby(sample.index.to_period("M")).tail(1).values)
+
+
+def yield_trend_targets(
+    monthly_yield: pd.Series,
+    *,
+    equity_if_falling: float,
+    second_if_falling: str,
+    first_if_rising: str,
+    lookback_months: int = 1,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Create state weights and monthly targets for group-selected ranks."""
+    tilts = ("RSP", "SPHQ")
+    if second_if_falling not in tilts or first_if_rising not in tilts:
+        raise ValueError("Choose the requested equity rank from RSP and SPHQ.")
+    if equity_if_falling not in (0.3, 0.7) or lookback_months < 1:
+        raise ValueError("Use one of the two equity/bond splits and a positive yield lookback.")
+
+    rank_weights = np.asarray(YIELD_RANK_WEIGHTS) / sum(YIELD_RANK_WEIGHTS)
+    third_if_falling = next(ticker for ticker in tilts if ticker != second_if_falling)
+    second_if_rising = next(ticker for ticker in tilts if ticker != first_if_rising)
+    rising_equity = 1.0 - equity_if_falling
+    falling = dict(zip(("SPY", second_if_falling, third_if_falling), equity_if_falling * rank_weights))
+    rising = dict(zip((first_if_rising, second_if_rising, "SPY"), rising_equity * rank_weights))
+    falling[YIELD_BOND] = rising_equity
+    rising[YIELD_BOND] = equity_if_falling
+    state_weights = pd.DataFrame([falling, rising], index=["Falling", "Rising"], columns=[*YIELD_EQUITIES, YIELD_BOND])
+
+    changes = monthly_yield.diff(lookback_months)
+    direction = np.sign(changes).replace(0, np.nan).ffill().dropna()
+    states = direction.map({-1.0: "Falling", 1.0: "Rising"})
+    targets = state_weights.loc[states].set_axis(states.index)
+    return state_weights, targets
 
 
 # --------------------------------------------------------------------------- #
@@ -276,6 +348,84 @@ def run_trend_backtest(
             "initial_cash": initial_cash,
         },
     }
+
+
+def run_monthly_etf_backtest(
+    close: pd.DataFrame,
+    targets: pd.DataFrame,
+    *,
+    lag: int = 2,
+    cost_bps: float = 5.0,
+    initial_cash: float = 100_000.0,
+) -> dict:
+    """Execute long-only ETF targets on the close of the lag-th session after each signal.
+
+    The caller supplies adjusted closes on the US equity trading calendar,
+    starting with a base close on or before the first signal, and one row of
+    target weights per signal. A signal can fall on a nontrading date.
+    """
+    if not isinstance(lag, int) or lag < 1:
+        raise ValueError("The lag must be a positive number of trading sessions.")
+    if not 0 <= cost_bps <= 100 or not np.isfinite(initial_cash) or initial_cash <= 0:
+        raise ValueError("Use positive initial capital and trading costs between 0 and 100 bps per side.")
+    if close.index.has_duplicates or not close.index.is_monotonic_increasing:
+        raise ValueError("Price dates must be unique and in ascending order.")
+    if len(close) < 2 or targets.empty or targets.index.to_period("M").has_duplicates:
+        raise ValueError("Provide at least two price dates and at most one target per month.")
+    if targets.index.min() < close.index[0] or targets.columns.has_duplicates:
+        raise ValueError("Use unique ETF tickers and begin the price calendar on or before the first signal.")
+
+    prices = close.reindex(columns=targets.columns).to_numpy(dtype=float)
+    invalid_price = ~np.isfinite(prices) | (prices <= 0)
+    if invalid_price.any():
+        day, asset = np.argwhere(invalid_price)[0]
+        raise ValueError(f"Missing or invalid adjusted close for {targets.columns[asset]} on {close.index[day]:%Y-%m-%d}.")
+
+    weights = targets.to_numpy(dtype=float)
+    totals = weights.sum(axis=1)
+    if not np.isfinite(weights).all() or (weights < 0).any() or not np.allclose(totals, 1, rtol=0, atol=1e-8):
+        raise ValueError("Each row of target weights must be nonnegative and sum to 100%.")
+    weights = weights / totals[:, None]
+
+    execution_days = close.index.searchsorted(targets.index, side="right") + lag - 1
+    orders = {day: row for row, day in enumerate(execution_days) if day < len(close)}
+    if not orders:
+        raise ValueError("There are no executable orders within the price sample.")
+    if len(orders) != (execution_days < len(close)).sum():
+        raise ValueError("Multiple signals resolve to the same execution date.")
+
+    cash = float(initial_cash)
+    shares = np.zeros(len(targets.columns))
+    cost = cost_bps / 10_000
+    equity_rows = []
+    trade_rows = []
+    for day, price in enumerate(prices):
+        marked_holdings = shares * price
+        nav = cash + marked_holdings.sum()
+        if day in orders:
+            row = orders[day]
+            target = weights[row]
+            after_fee = nav
+            # The iteration is a contraction of at most 1% at allowed fee rates.
+            # Solve post-fee NAV so both sides are paid and no cash is borrowed.
+            for _ in range(8):
+                after_fee = nav - cost * np.abs(target * after_fee - marked_holdings).sum()
+            allocation = target * after_fee
+            for asset, change in enumerate(allocation - marked_holdings):
+                if abs(change) > 1e-10:
+                    trade_rows.append((
+                        targets.index[row], close.index[day], targets.columns[asset],
+                        "buy" if change > 0 else "sell", price[asset], abs(change), abs(change) * cost,
+                    ))
+            shares = allocation / price
+            cash = 0.0
+            marked_holdings = allocation
+        invested = marked_holdings.sum()
+        equity_rows.append((cash + invested, cash, invested))
+
+    equity = pd.DataFrame(equity_rows, index=close.index, columns=["Equity", "Cash", "Invested"])
+    trades = pd.DataFrame(trade_rows, columns=["SignalDate", "ExecDate", "Ticker", "Action", "Price", "Notional", "Fee"])
+    return {"equity": equity, "trades": trades}
 
 
 # --------------------------------------------------------------------------- #
@@ -426,6 +576,73 @@ def rolling_outcomes(
         index=["Windows", "Worst", "Median", "Best", "% Positive"],
     )
     return {"summary": summary, "strategy": strat, "benchmark": bench}
+
+
+def run_yield_trend_scenario(
+    close: pd.DataFrame,
+    monthly_yield: pd.Series,
+    *,
+    equity_if_falling: float = YIELD_TREND_BASELINE["equity_if_falling"],
+    second_if_falling: str = YIELD_TREND_BASELINE["second_if_falling"],
+    first_if_rising: str = YIELD_TREND_BASELINE["first_if_rising"],
+    lookback_months: int = YIELD_TREND_BASELINE["lookback_months"],
+    cost_bps: float = YIELD_TREND_BASELINE["cost_bps"],
+) -> dict:
+    """Run the 2016–2025 yield trend and its fixed-weight comparator."""
+    state_weights, targets = yield_trend_targets(
+        monthly_yield,
+        equity_if_falling=equity_if_falling,
+        second_if_falling=second_if_falling,
+        first_if_rising=first_if_rising,
+        lookback_months=lookback_months,
+    )
+    base = pd.Timestamp(YIELD_START) - pd.Timedelta(days=1)
+    prices = close.loc[base:YIELD_END]
+    targets = targets.loc[base:YIELD_END]
+    fixed_targets = pd.DataFrame(
+        [state_weights.mean().to_dict()] * len(targets),
+        index=targets.index,
+    )
+    strategy = run_monthly_etf_backtest(prices, targets, cost_bps=cost_bps)
+    policy = run_monthly_etf_backtest(prices, fixed_targets, cost_bps=cost_bps)
+    gross_strategy = run_monthly_etf_backtest(prices, targets, cost_bps=0) if cost_bps else strategy
+    gross_policy = run_monthly_etf_backtest(prices, fixed_targets, cost_bps=0) if cost_bps else policy
+    spy = prices[DEFAULT_BENCHMARK]
+    rf_annual = close[DEFAULT_RF].ffill().shift(1) / 100.0
+    rf_daily = ((1.0 + rf_annual) ** (1.0 / TRADING_DAYS) - 1.0).loc[prices.index]
+    return {
+        "strategy": strategy,
+        "policy": policy,
+        "gross_strategy": gross_strategy,
+        "gross_policy": gross_policy,
+        "spy": spy,
+        "rf_daily": rf_daily,
+        "state_weights": state_weights,
+    }
+
+
+def yield_trend_metrics(result: Mapping) -> pd.DataFrame:
+    """Report the same performance measures for the notebook and Streamlit."""
+    spy = result["spy"]
+    rf_daily = result["rf_daily"]
+    columns = {}
+    for label, key in [("Yield trend", "strategy"), ("Fixed-weight mix", "policy")]:
+        equity = result[key]["equity"]
+        net = performance_metrics(equity, spy, rf_daily)
+        gross = performance_metrics(result[f"gross_{key}"]["equity"], spy, rf_daily)
+        rolling = rolling_outcomes(equity, spy)["summary"]
+        columns[label] = {
+            "Maximum drawdown": net["MaxDrawdown"],
+            "Worst rolling 24 months": rolling.loc["Worst", "Strategy"],
+            "Net Sharpe": net["Sharpe"],
+            "Gross Sharpe": gross["Sharpe"],
+            "Annualized average return": net["ArithmeticReturn"],
+            "Annualized volatility": net["Volatility"],
+            "Annualized alpha vs SPY": net["Alpha"],
+            "Beta vs SPY": net["Beta"],
+            "Information ratio vs SPY": net["InformationRatio"],
+        }
+    return pd.DataFrame(columns)
 
 
 def calendar_returns(equity: pd.Series | pd.DataFrame, benchmark: pd.Series) -> pd.DataFrame:

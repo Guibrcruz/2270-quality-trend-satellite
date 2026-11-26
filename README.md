@@ -56,6 +56,21 @@ streamlit run app.py
 Then open `http://localhost:8501`. The chart component is vendored in `chart_component/`,
 so it does not load Lightweight Charts from a CDN.
 
+## Treasury Yield Trend
+
+Open **Treasury Yield Trend** from the app or its sidebar to test the 2016–2025
+allocation of SPY, RSP, SPHQ and BND. The defaults match the one-month strategy
+in the notebook. The equity ranks, equity/bond split, yield lookback and trading
+cost are adjustable.
+
+The strategy uses the 3-year FRED yield with a one-Federal-Reserve-business-day
+publication lag and trades at the close of the second U.S. session after month-end.
+The comparison uses a fixed mix of the same ETFs on the same trading dates. The
+results show drawdown, rolling 24-month returns and gross and net Sharpe.
+
+Codex assisted with the Treasury Yield Trend page and backtest implementation.
+`python test_yield_trend.py` checks publication lag, execution timing and fees.
+
 ## Data and methodology
 
 - Data: Yahoo Finance adjusted OHLC via `yfinance`; no data file is stored in the repo.
