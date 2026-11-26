@@ -16,8 +16,9 @@ import streamlit as st
 
 import portfolio as pf
 
-GROUP_NAME = "[GROUP NAME]"
-MEMBERS = "[MEMBER NAMES AND STUDENT IDS]"
+GROUP_NAME = "Group CD"
+MEMBERS = ("Gabriel Conceição, Guilherme Cruz, Joana Alves, "
+           "Francisco Correia, Luís Moreira, Miguel Monteiro")
 START = "2010-01-01"
 END = "2025-12-31"
 WARMUP_START = "2008-01-01"

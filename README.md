@@ -11,7 +11,14 @@ so the default scenario reproduces the notebook's headline results.
 
 ## Live app
 
-`[STREAMLIT APP URL]`
+https://2270-quality-trend-satellite.streamlit.app
+
+## Group
+
+- Moodle group: **Group CD**
+- Members: Gabriel Conceição, Guilherme Cruz, Joana Alves, Francisco Correia,
+  Luís Moreira, Miguel Monteiro
+- Submission: 4 December 2026
 
 ## What you can change
 
@@ -49,12 +56,6 @@ In-sample rule selection, survivorship bias from using a current ETF, one factor
 country, no taxes, no fund tracking error, and a favourable 2010–2025 sample. Alpha's
 t-statistic is about 1.62, so it is not statistically significant. This is an academic
 exercise, not investment advice.
-
-## Group
-
-- Moodle group: `[GROUP NAME]`
-- Members: `[MEMBER NAMES AND STUDENT IDS]`
-- Submission: 4 December 2026
 
 ## Generative-AI disclosure
 
