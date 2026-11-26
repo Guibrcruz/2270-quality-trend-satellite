@@ -248,7 +248,7 @@ strat_cum = eq["Equity"] / eq["Equity"].iloc[0]
 spy_cum = bench / bench.iloc[0]
 pol_cum = policy / policy.iloc[0]
 
-fig, ax = plt.subplots(figsize=(11, 4.4))
+fig, ax = plt.subplots(figsize=(10, 4.0))
 ax.plot(strat_cum.index, strat_cum, color="#1F4E79", lw=2.2, label=f"Quality trend ({strat_cum.iloc[-1]:.2f}x)")
 ax.plot(spy_cum.index, spy_cum, color="#7F7F7F", lw=1.4, label=f"SPY ({spy_cum.iloc[-1]:.2f}x)")
 ax.plot(pol_cum.index, pol_cum, color="#C55A11", lw=1.6, ls="--",
@@ -318,7 +318,7 @@ with tab_risk:
     st.subheader("Drawdown")
     dd_strat = strat_cum / strat_cum.cummax() - 1.0
     dd_spy = spy_cum / spy_cum.cummax() - 1.0
-    fig, ax = plt.subplots(figsize=(11, 3.6))
+    fig, ax = plt.subplots(figsize=(10, 3.3))
     ax.fill_between(dd_spy.index, dd_spy, 0, color="#7F7F7F", alpha=0.25, label="SPY")
     ax.fill_between(dd_strat.index, dd_strat, 0, color="#1F4E79", alpha=0.45, label="Quality trend")
     ax.set_ylabel("Drawdown")
@@ -342,7 +342,7 @@ with tab_risk:
     st.subheader("Rolling 24-month return")
     rs = eq["Equity"].shift(-504) / eq["Equity"] - 1.0
     rb = bench.shift(-504) / bench - 1.0
-    fig, ax = plt.subplots(figsize=(11, 3.2))
+    fig, ax = plt.subplots(figsize=(10, 3.0))
     ax.plot(rs.index, rs, color="#1F4E79", lw=1.4, label="Quality trend")
     ax.plot(rb.index, rb, color="#7F7F7F", lw=1.0, label="SPY")
     ax.axhline(0, color="black", lw=0.8)
