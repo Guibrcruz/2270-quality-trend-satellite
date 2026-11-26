@@ -419,8 +419,12 @@ with tab_method:
         sample. Alpha's t-statistic is about 1.62, so it is not statistically significant.
 
         **Generative AI:** this app and the underlying analysis were built with DeepSeek V4.1 Flash
-        via OpenCode. The group formulated the mandate and approved the rule; all code was run and
-        checked by the group. No data or results were fabricated.
+        via OpenCode. The group formulated the mandate and the original Bollinger Bands idea; the
+        assistant tested it, showed that it did not survive a fair comparison, and proposed the
+        SPHQ quality-trend alternative. The group reviewed the evidence and approved the pivot and
+        the final rule. All code was run and checked by the group. No data or results were
+        fabricated. The group should confirm that AI-assisted strategy selection is permitted under
+        the course AI policy.
         """
     )
     st.info(
